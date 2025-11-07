@@ -24,15 +24,18 @@ MORSE_CODE = {
 class MorseVideoDecoder:
     """Decodes Morse code from video by tracking light intensity changes."""
     
-    def __init__(self, roi_size=64, smooth_window=5, debug=False):
+    def __init__(self, roi_size=64, smooth_window=5, debug=False, interactive_roi=False, adaptive_threshold=True):
         self.roi_size = roi_size
         self.smooth_window = smooth_window
         self.debug = debug
+        self.interactive_roi = interactive_roi      # ← NEW: enables manual ROI selection
+        self.adaptive_threshold = adaptive_threshold # ← NEW: enables adaptive thresholds
         
         # Signal processing parameters
         self.threshold_high = 0.4  # Intensity above this = ON
         self.threshold_low = 0.1   # Intensity below this = OFF
         self.baseline_alpha = 0.02  # Slow baseline adaptation
+        self.max_intensity = 0.5 
         
         # Timing parameters
         self.unit_duration = 0.1  # Initial guess (in seconds)
@@ -54,12 +57,34 @@ class MorseVideoDecoder:
         self.decoded_text = ""
         
     def select_roi(self, frame):
-        """Find the brightest region in the frame as ROI."""
+        """Find the brightest region in the frame as ROI or let user select."""
+        # ↓↓↓ NEW SECTION: Interactive selection ↓↓↓
+        if self.interactive_roi:
+            print("\n" + "="*50)
+            print("INTERACTIVE ROI SELECTION")
+            print("="*50)
+            print("1. Turn your flashlight ON")
+            print("2. Click and drag to select the flashlight area")
+            print("3. Press ENTER to confirm, or ESC to auto-select")
+            print("="*50 + "\n")
+            
+            roi = cv2.selectROI("Select Flashlight ROI", frame, fromCenter=False, showCrosshair=True)
+            cv2.destroyWindow("Select Flashlight ROI")
+            
+            if roi[2] > 0 and roi[3] > 0:  # Valid selection
+                self.roi = roi
+                print(f"✓ ROI manually selected at ({roi[0]}, {roi[1]}, size: {roi[2]}x{roi[3]})")
+                return self.roi
+        # ↑↑↑ END NEW SECTION ↑↑↑
+        
+        # Auto-select brightest region (ORIGINAL CODE with minor improvements)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (15, 15), 0)
         
         # Find brightest point
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
+        
+        print(f"Auto-detecting brightest point: intensity={max_val:.1f}/255")  # ← NEW: show what it found
         
         # Center ROI around brightest point
         x = max(0, max_loc[0] - self.roi_size // 2)
@@ -68,7 +93,7 @@ class MorseVideoDecoder:
         y = min(y, frame.shape[0] - self.roi_size)
         
         self.roi = (x, y, self.roi_size, self.roi_size)
-        print(f"ROI selected at ({x}, {y})")
+        print(f"✓ ROI auto-selected at ({x}, {y})")  # ← NEW: better message
         return self.roi
     
     def extract_intensity(self, frame):
@@ -89,6 +114,23 @@ class MorseVideoDecoder:
             # Only update baseline when light is OFF (low intensity)
             if intensity < 0.5:
                 self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * intensity
+        
+        # ↓↓↓ NEW SECTION: Adaptive thresholds ↓↓↓
+        # Track maximum intensity for adaptive thresholding
+        if intensity > self.max_intensity:
+            self.max_intensity = intensity
+            
+            # Adaptively update thresholds if enabled
+            if self.adaptive_threshold and self.baseline is not None:
+                intensity_range = self.max_intensity - self.baseline
+                if intensity_range > 0.2:  # Sufficient dynamic range
+                    # Set thresholds as percentages of the range
+                    self.threshold_low = self.baseline + 0.2 * intensity_range
+                    self.threshold_high = self.baseline + 0.6 * intensity_range
+                    
+                    if self.debug:
+                        print(f"Adaptive thresholds: LOW={self.threshold_low:.3f}, HIGH={self.threshold_high:.3f}")
+        # ↑↑↑ END NEW SECTION ↑↑↑
         
         # Smooth with buffer
         self.intensity_buffer.append(intensity)

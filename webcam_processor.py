@@ -19,8 +19,18 @@ def process_webcam(decoder, camera_id=0, display=True):
     if fps == 0:
         fps = 30  # Default fallback
     
-    print(f"Processing webcam at {fps:.1f} FPS")
-    print("Press 'q' to quit")
+    print(f"\n{'='*50}")
+    print(f"WEBCAM MORSE CODE DECODER")
+    print(f"{'='*50}")
+    print(f"Camera FPS: {fps:.1f}")
+    print(f"Unit duration estimate: {decoder.unit_duration*1000:.0f}ms")
+    print(f"\nInstructions:")
+    print("  1. Position your flashlight in view")
+    print("  2. Turn it ON for ROI selection")
+    print("  3. Start blinking Morse code")
+    print("  4. Press 'q' to quit")
+    print("  5. Press 'r' to reselect ROI")
+    print(f"{'='*50}\n")
     
     frame_count = 0
     
@@ -53,8 +63,15 @@ def process_webcam(decoder, camera_id=0, display=True):
             display_frame = decoder.draw_overlay(frame.copy(), intensity, timestamp)
             cv2.imshow('Morse Decoder', display_frame)
             
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
                 break
+            elif key == ord('r'):
+                # Reset ROI selection
+                print("\nReselecting ROI...")
+                decoder.roi = None
+                decoder.baseline = None
+                decoder.max_intensity = 0.5
         
         frame_count += 1
     
