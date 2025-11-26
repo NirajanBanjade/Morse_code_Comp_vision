@@ -105,3 +105,6 @@ Amateur radio and hobbyist tools
 
 Assistive technology for people who use visual signaling
 
+
+
+python main.py 0 --interactive --roi-size 100

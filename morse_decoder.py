@@ -28,20 +28,22 @@ class MorseVideoDecoder:
         self.roi_size = roi_size
         self.smooth_window = smooth_window
         self.debug = debug
-        self.interactive_roi = interactive_roi      # ← NEW: enables manual ROI selection
-        self.adaptive_threshold = adaptive_threshold # ← NEW: enables adaptive thresholds
+        self.interactive_roi = interactive_roi
+        self.adaptive_threshold = adaptive_threshold
         
-        # Signal processing parameters
-        self.threshold_high = 0.4  # Intensity above this = ON
-        self.threshold_low = 0.1   # Intensity below this = OFF
-        self.baseline_alpha = 0.02  # Slow baseline adaptation
-        self.max_intensity = 0.5 
+        # MORE FORGIVING signal processing parameters
+        self.threshold_high = 0.5   # Changed from 0.4
+        self.threshold_low = 0.2    # Changed from 0.1
+        self.baseline_alpha = 0.02
+        self.max_intensity = 0.5
         
-        # Timing parameters
-        self.unit_duration = 0.1  # Initial guess (in seconds)
-        self.unit_min = 0.02
-        self.unit_max = 0.25
-        self.unit_alpha = 0.1  # Unit duration adaptation rate
+        # MORE REALISTIC timing parameters for human input
+        self.unit_duration = 0.3    # Changed from 0.1 - humans are slower!
+        self.unit_min = 0.1         # Changed from 0.02
+        self.unit_max = 1.0         # Changed from 0.25
+        self.unit_alpha = 0.15      # Faster adaptation
+        
+        # Rest stays the same...
         
         # State tracking
         self.roi = None
@@ -162,22 +164,25 @@ class MorseVideoDecoder:
         self.unit_duration = (1 - self.unit_alpha) * self.unit_duration + self.unit_alpha * new_unit
     
     def classify_duration(self, duration, is_on):
-        """Classify duration as dot/dash (ON) or gap type (OFF)."""
+        """Classify duration with generous tolerance for human input."""
         units = duration / self.unit_duration
         
+        if self.debug:
+            print(f"    Duration: {duration:.3f}s = {units:.1f} units")
+        
         if is_on:
-            # Dot = ~1 unit, Dash = ~3 units
-            if units < 1.8:
+            # Dot vs Dash: threshold at 2.0 units (midpoint between 1 and 3)
+            if units < 2.0:
                 return 'dot'
             else:
                 return 'dash'
         else:
-            # Intra-letter = ~1 unit, Letter gap = ~3 units, Word gap = ~7 units
-            if units < 1.8:
+            # Gap classification with generous ranges
+            if units < 2.0:           # < 2 units = intra-letter gap
                 return 'intra'
-            elif units < 4.5:
+            elif units < 5.0:         # 2-5 units = letter gap
                 return 'letter'
-            else:
+            else:                     # > 5 units = word gap
                 return 'word'
     
     def decode_symbol(self):
@@ -267,3 +272,10 @@ class MorseVideoDecoder:
                    (20, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         
         return frame
+    
+    def calibrate_from_test_signal(self, test_durations):
+        """Calibrate from a few test blinks."""
+        if len(test_durations) >= 3:
+            avg_duration = np.mean(test_durations)
+            self.unit_duration = avg_duration  # Use actual measured dots
+            print(f"✓ Calibrated: unit = {self.unit_duration*1000:.0f}ms")
