@@ -48,33 +48,110 @@ pip install opencv-python numpy
 
 ## 📖 Usage
 
-### Basic Usage
+## 🎯 How It Works
 
-**Decode from a video file:**
+This project supports three main workflows:
+1. Generating synthetic Morse videos (for testing)
+2. Decoding Morse code from a video file
+3. Real-time decoding from webcam feed
+
+Each section below includes code or commands to help you reproduce results.
+
+### 🎥 1. Generate Test Videos (Synthetic Morse Code Video Creator)
+
+You can create your own blinking-light Morse videos using the included video generation script.
+
+**Example: Generate a video for "SOS"**
+```bash
+python generate_morse_video.py --message "SOS" --dot-duration 0.1 --fps 30 --output sos.mp4
+```
+
+#### Key Options
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--message` | The text message to encode in Morse | Required |
+| `--dot-duration` | Duration (seconds) of a dot | 0.1 |
+| `--fps` | Frames per second in output video | 30 |
+| `--output` | Output filename | output.mp4 |
+
+**Output:** A blinking white circle simulating Morse code, ideal for testing the decoder.
+
+### 🔎 2. Decode Morse Code from Video Files
+
+Use the main decoder to process any video containing a blinking light source.
+
+**Basic decoding:**
 ```bash
 python main.py video.mp4
 ```
 
-**Decode from webcam:**
+**Example with debug logs enabled:**
+```bash
+python main.py sos.mp4 --debug
+```
+
+**Example with custom ROI size:**
+```bash
+python main.py video.mp4 --roi-size 128
+```
+
+#### What happens internally:
+- The system auto-detects the brightest object
+- Tracks intensity changes frame-by-frame
+- Extracts ON/OFF durations
+- Classifies durations as dot, dash, letter gap, or word gap
+- Translates final Morse code sequence into text
+
+#### Expected Output Example:
+```
+Processing video at 30.0 FPS
+
+Auto-detecting brightest point...
+✓ ROI auto-selected at (281, 166)
+
+Decoded: S → 'S'
+Decoded: O → 'SO'
+Decoded: S → 'SOS'
+
+==================================================
+DECODED TEXT:
+SOS
+==================================================
+```
+
+### 🎦 3. Real-Time Decoding from Webcam
+
+You can also decode live Morse signals with your webcam.
+
+**Start webcam decoding:**
 ```bash
 python main.py 0
 ```
 
-### Advanced Options
-
+**Useful options:**
 ```bash
-# Run without display window (headless mode)
-python main.py video.mp4 --no-display
-
-# Enable debug mode for detailed logs
-python main.py video.mp4 --debug
-
-# Custom ROI (Region of Interest) size
-python main.py video.mp4 --roi-size 128
-
-# Combine multiple options
-python main.py 0 --debug --roi-size 64
+# Debug mode + silent window
+python main.py 0 --debug --no-display
 ```
+
+#### Features during real-time mode:
+- Live ROI detection
+- Light intensity overlay
+- Frame-by-frame ON/OFF classification
+- Real-time decoded characters appearing as you blink a flashlight
+
+This mode is great for interactive demos, presentations, and live signaling.
+
+### 🧠 How to Know Which Mode to Use
+
+| Task | Command | Purpose |
+|------|---------|---------|
+| Generate your own Morse video | `generate_morse_video.py` | Testing & reproducibility |
+| Decode from an existing file | `main.py video.mp4` | Analyze recordings |
+| Decode in real time | `main.py 0` | Demo or live communication |
+
+---
 
 ### Command-Line Arguments
 
