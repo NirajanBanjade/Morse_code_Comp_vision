@@ -33,7 +33,7 @@ numpy>=1.19.0
 1. **Clone the repository**
 ```bash
 git clone https://github.com/yourusername/morse-video-decoder.git
-cd morse-video-decoder
+cd Morse_code_Comp_vision
 ```
 
 2. **Install dependencies**
@@ -63,7 +63,7 @@ You can create your own blinking-light Morse videos using the included video gen
 
 **Example: Generate a video for "SOS"**
 ```bash
-python generate_morse_video.py --message "SOS" --dot-duration 0.1 --fps 30 --output sos.mp4
+python generate_morse_video.py --text "SOS" --output sos.mp4
 ```
 
 #### Key Options
@@ -127,12 +127,6 @@ You can also decode live Morse signals with your webcam.
 **Start webcam decoding:**
 ```bash
 python main.py 0
-```
-
-**Useful options:**
-```bash
-# Debug mode + silent window
-python main.py 0 --debug --no-display
 ```
 
 #### Features during real-time mode:
