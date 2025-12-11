@@ -24,21 +24,26 @@ MORSE_CODE = {
 class MorseVideoDecoder:
     """Decodes Morse code from video by tracking light intensity changes."""
     
-    def __init__(self, roi_size=64, smooth_window=5, debug=False):
+    def __init__(self, roi_size=64, smooth_window=5, debug=False, interactive_roi=False, adaptive_threshold=True):
         self.roi_size = roi_size
         self.smooth_window = smooth_window
         self.debug = debug
+        self.interactive_roi = interactive_roi
+        self.adaptive_threshold = adaptive_threshold
         
-        # Signal processing parameters
-        self.threshold_high = 0.4  # Intensity above this = ON
-        self.threshold_low = 0.1   # Intensity below this = OFF
-        self.baseline_alpha = 0.02  # Slow baseline adaptation
+        # MORE FORGIVING signal processing parameters
+        self.threshold_high = 0.5   # Changed from 0.4
+        self.threshold_low = 0.2    # Changed from 0.1
+        self.baseline_alpha = 0.02
+        self.max_intensity = 0.5
         
-        # Timing parameters
-        self.unit_duration = 0.1  # Initial guess (in seconds)
-        self.unit_min = 0.02
-        self.unit_max = 0.25
-        self.unit_alpha = 0.1  # Unit duration adaptation rate
+        # MORE REALISTIC timing parameters for human input
+        self.unit_duration = 0.3    # Changed from 0.1 - humans are slower!
+        self.unit_min = 0.1         # Changed from 0.02
+        self.unit_max = 1.0         # Changed from 0.25
+        self.unit_alpha = 0.15      # Faster adaptation
+        
+        # Rest stays the same...
         
         # State tracking
         self.roi = None
@@ -54,12 +59,34 @@ class MorseVideoDecoder:
         self.decoded_text = ""
         
     def select_roi(self, frame):
-        """Find the brightest region in the frame as ROI."""
+        """Find the brightest region in the frame as ROI or let user select."""
+        # ↓↓↓ NEW SECTION: Interactive selection ↓↓↓
+        if self.interactive_roi:
+            print("\n" + "="*50)
+            print("INTERACTIVE ROI SELECTION")
+            print("="*50)
+            print("1. Turn your flashlight ON")
+            print("2. Click and drag to select the flashlight area")
+            print("3. Press ENTER to confirm, or ESC to auto-select")
+            print("="*50 + "\n")
+            
+            roi = cv2.selectROI("Select Flashlight ROI", frame, fromCenter=False, showCrosshair=True)
+            cv2.destroyWindow("Select Flashlight ROI")
+            
+            if roi[2] > 0 and roi[3] > 0:  # Valid selection
+                self.roi = roi
+                print(f"✓ ROI manually selected at ({roi[0]}, {roi[1]}, size: {roi[2]}x{roi[3]})")
+                return self.roi
+        # ↑↑↑ END NEW SECTION ↑↑↑
+        
+        # Auto-select brightest region (ORIGINAL CODE with minor improvements)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (15, 15), 0)
         
         # Find brightest point
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
+        
+        print(f"Auto-detecting brightest point: intensity={max_val:.1f}/255")  # ← NEW: show what it found
         
         # Center ROI around brightest point
         x = max(0, max_loc[0] - self.roi_size // 2)
@@ -68,7 +95,7 @@ class MorseVideoDecoder:
         y = min(y, frame.shape[0] - self.roi_size)
         
         self.roi = (x, y, self.roi_size, self.roi_size)
-        print(f"ROI selected at ({x}, {y})")
+        print(f"✓ ROI auto-selected at ({x}, {y})")  # ← NEW: better message
         return self.roi
     
     def extract_intensity(self, frame):
@@ -89,6 +116,23 @@ class MorseVideoDecoder:
             # Only update baseline when light is OFF (low intensity)
             if intensity < 0.5:
                 self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * intensity
+        
+        # ↓↓↓ NEW SECTION: Adaptive thresholds ↓↓↓
+        # Track maximum intensity for adaptive thresholding
+        if intensity > self.max_intensity:
+            self.max_intensity = intensity
+            
+            # Adaptively update thresholds if enabled
+            if self.adaptive_threshold and self.baseline is not None:
+                intensity_range = self.max_intensity - self.baseline
+                if intensity_range > 0.2:  # Sufficient dynamic range
+                    # Set thresholds as percentages of the range
+                    self.threshold_low = self.baseline + 0.2 * intensity_range
+                    self.threshold_high = self.baseline + 0.6 * intensity_range
+                    
+                    if self.debug:
+                        print(f"Adaptive thresholds: LOW={self.threshold_low:.3f}, HIGH={self.threshold_high:.3f}")
+        # ↑↑↑ END NEW SECTION ↑↑↑
         
         # Smooth with buffer
         self.intensity_buffer.append(intensity)
@@ -120,22 +164,25 @@ class MorseVideoDecoder:
         self.unit_duration = (1 - self.unit_alpha) * self.unit_duration + self.unit_alpha * new_unit
     
     def classify_duration(self, duration, is_on):
-        """Classify duration as dot/dash (ON) or gap type (OFF)."""
+        """Classify duration with generous tolerance for human input."""
         units = duration / self.unit_duration
         
+        if self.debug:
+            print(f"    Duration: {duration:.3f}s = {units:.1f} units")
+        
         if is_on:
-            # Dot = ~1 unit, Dash = ~3 units
-            if units < 1.8:
+            # Dot vs Dash: threshold at 2.0 units (midpoint between 1 and 3)
+            if units < 2.0:
                 return 'dot'
             else:
                 return 'dash'
         else:
-            # Intra-letter = ~1 unit, Letter gap = ~3 units, Word gap = ~7 units
-            if units < 1.8:
+            # Gap classification with generous ranges
+            if units < 2.0:           # < 2 units = intra-letter gap
                 return 'intra'
-            elif units < 4.5:
+            elif units < 5.0:         # 2-5 units = letter gap
                 return 'letter'
-            else:
+            else:                     # > 5 units = word gap
                 return 'word'
     
     def decode_symbol(self):
@@ -225,3 +272,10 @@ class MorseVideoDecoder:
                    (20, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         
         return frame
+    
+    def calibrate_from_test_signal(self, test_durations):
+        """Calibrate from a few test blinks."""
+        if len(test_durations) >= 3:
+            avg_duration = np.mean(test_durations)
+            self.unit_duration = avg_duration  # Use actual measured dots
+            print(f"✓ Calibrated: unit = {self.unit_duration*1000:.0f}ms")
