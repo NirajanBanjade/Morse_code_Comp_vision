@@ -74,7 +74,6 @@ def create_morse_video(text, output_path, wpm=12, fps=30, width=640, height=480)
     """Create a video with blinking Morse code."""
     
     # Calculate unit duration from WPM
-    # Standard: PARIS = 50 units, WPM = 50 units per minute
     unit_duration = 1.2 / wpm  # seconds per unit
     
     print(f"Generating Morse video:")
@@ -89,6 +88,12 @@ def create_morse_video(text, output_path, wpm=12, fps=30, width=640, height=480)
     
     # Generate timing pattern
     pattern = generate_timing_pattern(morse_code, unit_duration)
+    
+    # ↓↓↓ ADD CALIBRATION SEQUENCE ↓↓↓
+    # Add initial calibration: light ON for 2 seconds so ROI can detect it
+    # calibration = [(True, 2.0), (False, 1.0)]  # 2s ON, 1s OFF
+    # pattern = calibration + pattern
+    # ↑↑↑ END ADDITION ↑↑↑
     
     # Calculate total duration
     total_duration = sum(duration for _, duration in pattern)
@@ -120,7 +125,7 @@ def create_morse_video(text, output_path, wpm=12, fps=30, width=640, height=480)
             out.write(frame)
             frame_count += 1
     
-    # Add a final pause (letter gap duration) to ensure last symbol is decoded
+    # Add a final pause to ensure last symbol is decoded
     pause_frames = int(3 * unit_duration * fps)
     black_frame = np.zeros((height, width, 3), dtype=np.uint8)
     for _ in range(pause_frames):
@@ -135,7 +140,7 @@ def main():
     parser = argparse.ArgumentParser(description='Generate Morse code test video')
     parser.add_argument('--text', default='HELLO WORLD', help='Text to encode')
     parser.add_argument('--output', default='morse_test.mp4', help='Output video path')
-    parser.add_argument('--wpm', type=int, default=12, help='Words per minute')
+    parser.add_argument('--wpm', type=int, default=4, help='Words per minute')
     parser.add_argument('--fps', type=int, default=30, help='Frames per second')
     parser.add_argument('--width', type=int, default=640, help='Video width')
     parser.add_argument('--height', type=int, default=480, help='Video height')
